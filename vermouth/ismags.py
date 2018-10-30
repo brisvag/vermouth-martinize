@@ -120,14 +120,6 @@ class ISMAGS:
     def __init__(self, graph, subgraph, node_match=None, edge_match=None):
         self.graph = graph
         self.subgraph = subgraph
-        if node_match is None:
-            self.node_equality = self._node_match_maker(lambda n1, n2: True)
-        else:
-            self.node_equality = self._node_match_maker(node_match)
-        if edge_match is None:
-            self.edge_equality = self._edge_match_maker(lambda e1, e2: True)
-        else:
-            self.edge_equality = self._edge_match_maker(edge_match)
 
         self._sgn_partitions_ = None
         self._sge_partitions_ = None
@@ -144,6 +136,20 @@ class ISMAGS:
         self._node_compat_ = None
         self._edge_compat_ = None
 
+        if node_match is None:
+            self.node_equality = self._node_match_maker(lambda n1, n2: True)
+            self._sgn_partitions_ = [set(self.subgraph.nodes)]
+            self._gn_partitions_ = [set(self.graph.nodes)]
+            self._node_compat_ = {0: 0}
+        else:
+            self.node_equality = self._node_match_maker(node_match)
+        if edge_match is None:
+            self.edge_equality = self._edge_match_maker(lambda e1, e2: True)
+            self._sge_partitions_ = [set(self.subgraph.edges)]
+            self._ge_partitions_ = [set(self.graph.edges)]
+            self._edge_compat_ = {0: 0}
+        else:
+            self.edge_equality = self._edge_match_maker(edge_match)
 
     @property
     def _sgn_partitions(self):
@@ -268,25 +274,29 @@ class ISMAGS:
             constraints = self._make_constraints(cosets)
         else:
             constraints = []
-        candidates = defaultdict(list)
+        candidates = defaultdict(set)
         for sgn in self.subgraph.nodes:
             sgn_color = self._sgn_colors[sgn]
             if sgn_color in self._node_compatibility:
                 gn_color = self._node_compatibility[sgn_color]
-                candidates[sgn].append(frozenset(self._gn_partitions[gn_color]))
+                candidates[sgn].add(frozenset(self._gn_partitions[gn_color]))
             else:
-                candidates[sgn].append(frozenset())
+                candidates[sgn].add(frozenset())
             for sgn2 in self.subgraph[sgn]:
                 if (sgn, sgn2) in self._sge_colors:
                     sge_color = self._sge_colors[sgn, sgn2]
                 else:
+                    # FIXME directed graphs
                     sge_color = self._sge_colors[sgn2, sgn]
-                ge_color = self._edge_compatibility[sge_color]
-                g_edges = self._ge_partitions[ge_color]
-                candidates[sgn].append(frozenset(n for e in g_edges for n in e))
+                if sge_color in self._edge_compatibility:
+                    ge_color = self._edge_compatibility[sge_color]
+                    g_edges = self._ge_partitions[ge_color]
+                else:
+                    g_edges = []
+                candidates[sgn].add(frozenset(n for e in g_edges for n in e))
         candidates = dict(candidates)
         for sgn, options in candidates.items():
-            candidates[sgn] = tuple(options)
+            candidates[sgn] = frozenset(options)
         if candidates:
             start_sgn = min(candidates, key=lambda n: min(candidates[n], key=len))
             candidates[start_sgn] = (intersect(candidates[start_sgn]),)
@@ -339,6 +349,7 @@ class ISMAGS:
         counts = defaultdict(lambda: defaultdict(int))
         for node1, node2 in graph.edges:
             if (node1, node2) in edge_colors:
+                # FIXME directed graphs
                 ecolor = edge_colors[node1, node2]
             else:
                 ecolor = edge_colors[node2, node1]
@@ -384,8 +395,9 @@ class ISMAGS:
         # Note, we modify candidates here. Doesn't seem to affect results, but
         # remember this.
         candidates = candidates.copy()
-        candidates[sgn] = (intersect(candidates[sgn]),)
-        for gn in candidates[sgn][0]:
+        sgn_candidates = intersect(candidates[sgn])
+        candidates[sgn] = frozenset([sgn_candidates])
+        for gn in sgn_candidates:
             # We're going to try to map sgn to gn.
 
             # First, let's see if that would violate a constraint.
@@ -417,16 +429,23 @@ class ISMAGS:
                 new_sgn2_candidates = defaultdict(set)
                 for sgn2 in self.subgraph[sgn]:
                     if (sgn, sgn2) in self._sge_colors:
+                        # FIXME directed graphs
                         sge_color = self._sge_colors[sgn, sgn2]
                     else:
                         sge_color = self._sge_colors[sgn2, sgn]
-                    ge_color = self._edge_compatibility[sge_color]
-                    g_edges = self._ge_partitions[ge_color]
-                    # These are all nodes connected to gn...
-                    g_nodes = set(self.graph[gn])
-                    # But we only want those that are connected with the right
-                    # color...
-                    g_nodes.intersection_update(n for e in g_edges for n in e)
+                    if sge_color in self._edge_compatibility:
+                        ge_color = self._edge_compatibility[sge_color]
+                        g_edges = self._ge_partitions[ge_color]
+                    else:
+                        g_edges = []
+
+                    # Get all edges to gn of the right color:
+                    # FIXME directed graphs
+                    reverse_edges = map(tuple, map(reversed, self.graph.edges(nbunch=gn)))
+                    gn_edges = set(self.graph.edges(nbunch=gn)).union(reverse_edges)
+                    g_edges = set(g_edges).intersection(gn_edges)
+                    # And all nodes involved in those.
+                    g_nodes = {n for e in g_edges for n in e}
                     # Node color compatibility should be taken care of by the
                     # initial candidate lists made by find_subgraphs
                     new_sgn2_candidates[sgn2].update(g_nodes)
@@ -437,7 +456,8 @@ class ISMAGS:
 
                 new_candidates = candidates.copy()
                 for sgn2, options in new_sgn2_candidates.items():
-                    new_candidates[sgn2] = new_candidates[sgn2] + (frozenset(options),)
+
+                    new_candidates[sgn2] = new_candidates[sgn2].union([frozenset(options)])
                 # The next node is the one that is unmapped and has fewest
                 # candidates
                 next_sgn = min(set(self.subgraph.nodes) - set(mapping.keys()),
@@ -473,7 +493,8 @@ class ISMAGS:
                 # top and bot have only one element
                 if len(bot) != 1:
                     raise IndexError("Not all nodes are coupled. This is"
-                                     " impossible: {}, {}".format(top_partitions, bottom_partitions))
+                                     " impossible: {}, {}".format(top_partitions,
+                                                                  bottom_partitions))
                 if top != bot:
                     permutations.add(frozenset((next(iter(top)), next(iter(bot)))))
             # update orbits
