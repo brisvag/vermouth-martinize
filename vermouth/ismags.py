@@ -427,15 +427,9 @@ class ISMAGS:
                     # But we only want those that are connected with the right
                     # color...
                     g_nodes.intersection_update(n for e in g_edges for n in e)
-                    # And even then only those that have the right color
-                    sgn2_color = self._sgn_colors[sgn2]
-                    if sgn2_color in self._node_compatibility:
-                        gn_color = self._node_compatibility[sgn2_color]
-                        g_nodes.intersection_update(self._gn_partitions[gn_color])
-
-                        new_sgn2_candidates[sgn2].update(g_nodes)
-                    else:
-                        new_sgn2_candidates[sgn2].update([])
+                    # Node color compatibility should be taken care of by the
+                    # initial candidate lists made by find_subgraphs
+                    new_sgn2_candidates[sgn2].update(g_nodes)
                 # For every node sgn2 that does not have a connection to sgn,
                 # it's candidates can not have a connection to gn
                 for sgn2 in set(self.subgraph) - set(self.subgraph[sgn]):
@@ -479,7 +473,7 @@ class ISMAGS:
                 # top and bot have only one element
                 if len(bot) != 1:
                     raise IndexError("Not all nodes are coupled. This is"
-                                     " impossible")
+                                     " impossible: {}, {}".format(top_partitions, bottom_partitions))
                 if top != bot:
                     permutations.add(frozenset((next(iter(top)), next(iter(bot)))))
             # update orbits
@@ -518,18 +512,23 @@ class ISMAGS:
                     break
             if found:
                 break
+        else:  # No break
+            raise RuntimeError('Could not find node {} in any of these'
+                               ' partitions: {}'.format(node, top_partitions))
         for node2 in sorted(b_partition):
             if node != node2 and any(node in orbit and node2 in orbit for orbit in orbits):
                 # Orbit prune branch
+                continue
+            if len(b_partition) == 1:
+                # Can never result in symmetry
                 continue
             # Couple node to node2. This means they get their own partition
             new_top_partitions = [top.copy() for top in top_partitions]
             new_bottom_partitions = [bot.copy() for bot in bottom_partitions]
             new_t_groups = {node}, t_partition - {node}
             new_b_groups = {node2}, b_partition - {node2}
-            if node != min(t_partition):
-                new_t_groups = reversed(new_t_groups)
-                new_b_groups = reversed(new_b_groups)
+            new_t_groups = reversed(new_t_groups)
+            new_b_groups = reversed(new_b_groups)
             # Replace the old partitions with the coupled ones
             del new_top_partitions[pair_idx]
             del new_bottom_partitions[pair_idx]
@@ -542,9 +541,24 @@ class ISMAGS:
             new_bottom_partitions = self._refine_node_partitions(graph,
                                                                  new_bottom_partitions,
                                                                  edge_colors)
-            if len(new_bottom_partitions) != len(new_top_partitions):
-                # This can never result in symmetries: discard configuration
-                continue
+            # Sort the partitions by size. This works by the grace that sort
+            # is stable. We do this so we can deal with partitions like this:
+            # [{4}, {5, 6}, {0}, {1}, {3}, {2}] [{0, 4}, {5}, {6}, {1}, {3}, {2}]
+
+            # We collect the nodes that are coupled so we can use it as a
+            # sanity check.
+            fixed_couplings = {}
+            for top, bot in zip(new_top_partitions, new_bottom_partitions):
+                if len(top) == len(bot) == 1:
+                    fixed_couplings[next(iter(top))] = next(iter(bot))
+
+            new_top_partitions = sorted(new_top_partitions, key=len)
+            new_bottom_partitions = sorted(new_bottom_partitions, key=len)
+
+            for top, bot in zip(new_top_partitions, new_bottom_partitions):
+                if len(top) == len(bot) == 1 and next(iter(top)) in fixed_couplings:
+                    assert fixed_couplings[next(iter(top))] == next(iter(bot))
+
             new_perms, new_cosets = self._process_opp(graph,
                                                       new_top_partitions,
                                                       new_bottom_partitions,

@@ -49,6 +49,10 @@ from .helper_functions import make_into_set
         [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0), (0, 6), (6, 7),
          (2, 8), (8, 9), (4, 10), (10, 11)]
     ),
+    (
+     [],
+     [(0, 1), (1, 2), (1, 4), (2, 3), (3, 5), (3, 6)]
+    ),
 ])
 def graphs(request):
     """
@@ -68,7 +72,7 @@ def test_symmetric_self_isomorphism(graphs):
     """
     ismags = vermouth.ismags.ISMAGS(graphs, graphs)
     iso = list(ismags.find_subgraphs(True))
-    assert len(iso) == 1
+    assert make_into_set(iso) == make_into_set([{n: n for n in graphs}])
 
     graph_matcher = nx.isomorphism.GraphMatcher(graphs, graphs)
     nx_answer = list(graph_matcher.isomorphisms_iter())
@@ -97,25 +101,31 @@ NODE_DATA = st.dictionaries(keys=st.sampled_from(ATTRNAMES),
                             values=st.integers(min_value=0, max_value=MAX_NODES))
 
 ATTRS = st.lists(st.sampled_from(ATTRNAMES), unique=True, min_size=0, max_size=2)
-ISO_DATA = st.fixed_dictionaries({'atomname': st.integers(max_value=MAX_NODES, min_value=0),
-                                  'element': st.integers(max_value=MAX_NODES, min_value=0)})
+#ISO_DATA = st.fixed_dictionaries({'atomname': st.integers(max_value=MAX_NODES, min_value=0),
+#                                  'element': st.integers(max_value=MAX_NODES, min_value=0)})
+ISO_DATA = st.dictionaries(keys=st.sampled_from(ATTRNAMES), values=st.integers(max_value=MAX_NODES, min_value=0))
 
 ISO_BUILDER = graph_builder(node_data=ISO_DATA, min_nodes=0, max_nodes=MAX_NODES,
                             node_keys=st.integers(max_value=MAX_NODES, min_value=0))
 
 
 @settings(max_examples=500)
-@given(graph=ISO_BUILDER, subgraph=ISO_BUILDER)
-def test_asymmetric_isomorphism_nonmatch(graph, subgraph):
+@given(graph=ISO_BUILDER, subgraph=ISO_BUILDER, attrs=st.one_of(st.none(), ATTRS))
+def test_asymmetric_isomorphism_nonmatch(graph, subgraph, attrs):
     """
     Test against networkx reference implementation using graphs that are
     probably not subgraphs without considering symmetry.
     """
 
+    if attrs is None:
+        node_match = lambda n1, n2: True
+    else:
+        node_match = nx.isomorphism.categorical_node_match(attrs, [None]*len(attrs))
+
     note(("Graph nodes", graph.nodes(data=True)))
-    note(("Graph edges", graph.edges))
+    note(("Graph edges", graph.edges(data=True)))
     note(("Subgraph nodes", subgraph.nodes(data=True)))
-    note(("Subgraph edges", subgraph.edges))
+    note(("Subgraph edges", subgraph.edges(data=True)))
 
     node_match = nx.isomorphism.categorical_node_match('element', None)
     matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match)
@@ -130,19 +140,24 @@ def test_asymmetric_isomorphism_nonmatch(graph, subgraph):
 
 
 @settings(max_examples=500)
-@given(graph=ISO_BUILDER, subgraph=ISO_BUILDER)
-def test_symmetric_isomorphism_nonmatch(graph, subgraph):
+@given(graph=ISO_BUILDER, subgraph=ISO_BUILDER, attrs=st.one_of(st.none(), ATTRS))
+def test_symmetric_isomorphism_nonmatch(graph, subgraph, attrs):
     """
     Test against networkx reference implementation using graphs that are
     probably not subgraphs considering symmetry.
     """
 
-    note(("Graph nodes", graph.nodes(data=True)))
-    note(("Graph edges", graph.edges))
-    note(("Subgraph nodes", subgraph.nodes(data=True)))
-    note(("Subgraph edges", subgraph.edges))
+    if attrs is None:
+        node_match = lambda n1, n2: True
+    else:
+        node_match = nx.isomorphism.categorical_node_match(attrs, [None]*len(attrs))
 
-    node_match = nx.isomorphism.categorical_node_match('element', None)
+
+    note(("Graph nodes", graph.nodes(data=True)))
+    note(("Graph edges", graph.edges(data=True)))
+    note(("Subgraph nodes", subgraph.nodes(data=True)))
+    note(("Subgraph edges", subgraph.edges(data=True)))
+
     matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match)
     expected = make_into_set(matcher.subgraph_isomorphisms_iter())
     ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match)
@@ -157,22 +172,26 @@ def test_symmetric_isomorphism_nonmatch(graph, subgraph):
 
 
 @settings(max_examples=500)
-@given(subgraph=ISO_BUILDER)
-def test_hypo_symmetric_self_isomorphism(subgraph):
+@given(subgraph=ISO_BUILDER, attrs=st.one_of(st.none(), ATTRS))
+def test_hypo_symmetric_self_isomorphism(subgraph, attrs):
     """
     Make sure that when considering symmetry, there is only one isomorphism
     between a graph and itself
     """
-    note(("Graph nodes", subgraph.nodes(data=True)))
-    note(("Graph edges", subgraph.edges))
+    if attrs is None:
+        node_match = lambda n1, n2: True
+    else:
+        node_match = nx.isomorphism.categorical_node_match(attrs, [None]*len(attrs))
 
-    node_match = nx.isomorphism.categorical_node_match('element', None)
+    note(("Graph nodes", subgraph.nodes(data=True)))
+    note(("Graph edges", subgraph.edges(data=True)))
+
     ismags = vermouth.ismags.ISMAGS(subgraph, subgraph, node_match=node_match)
 
     found = make_into_set(ismags.find_subgraphs(True))
     note(("Found", found))
 
-    assert len(found) == 1
+    assert found == make_into_set([{n: n for n in subgraph}])
 
 
 @settings(max_examples=500)
@@ -182,6 +201,12 @@ def test_asymmetric_isomorphism_match(data):
     Test against networkx reference implementation using graphs that are
     subgraphs without considering symmetry.
     """
+    attrs = data.draw(st.one_of(st.none(), ATTRS))
+    if attrs is None:
+        node_match = lambda n1, n2: True
+    else:
+        node_match = nx.isomorphism.categorical_node_match(attrs, [None]*len(attrs))
+
 
     graph = data.draw(ISO_BUILDER)
     nodes = data.draw(st.sets(st.sampled_from(list(graph.nodes)),
@@ -189,11 +214,10 @@ def test_asymmetric_isomorphism_match(data):
     subgraph = graph.subgraph(nodes)
 
     note(("Graph nodes", graph.nodes(data=True)))
-    note(("Graph edges", graph.edges))
+    note(("Graph edges", graph.edges(data=True)))
     note(("Subgraph nodes", subgraph.nodes(data=True)))
-    note(("Subgraph edges", subgraph.edges))
+    note(("Subgraph edges", subgraph.edges(data=True)))
 
-    node_match = nx.isomorphism.categorical_node_match('element', None)
     matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match)
     expected = make_into_set(matcher.subgraph_isomorphisms_iter())
     ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match)
@@ -212,6 +236,12 @@ def test_symmetric_isomorphism_match(data):
     Test against networkx reference implementation using graphs that are
     subgraphs considering symmetry.
     """
+    attrs = data.draw(st.one_of(st.none(), ATTRS))
+    if attrs is None:
+        node_match = lambda n1, n2: True
+    else:
+        node_match = nx.isomorphism.categorical_node_match(attrs, [None]*len(attrs))
+
 
     graph = data.draw(ISO_BUILDER)
     nodes = data.draw(st.sets(st.sampled_from(list(graph.nodes)),
@@ -219,11 +249,10 @@ def test_symmetric_isomorphism_match(data):
     subgraph = graph.subgraph(nodes)
 
     note(("Graph nodes", graph.nodes(data=True)))
-    note(("Graph edges", graph.edges))
+    note(("Graph edges", graph.edges(data=True)))
     note(("Subgraph nodes", subgraph.nodes(data=True)))
-    note(("Subgraph edges", subgraph.edges))
+    note(("Subgraph edges", subgraph.edges(data=True)))
 
-    node_match = nx.isomorphism.categorical_node_match('element', None)
     matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match)
     expected = make_into_set(matcher.subgraph_isomorphisms_iter())
     ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match)
