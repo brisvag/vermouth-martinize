@@ -50,8 +50,8 @@ from .helper_functions import make_into_set
          (2, 8), (8, 9), (4, 10), (10, 11)]
     ),
     (
-     [],
-     [(0, 1), (1, 2), (1, 4), (2, 3), (3, 5), (3, 6)]
+        [],
+        [(0, 1), (1, 2), (1, 4), (2, 3), (3, 5), (3, 6)]
     ),
 ])
 def graphs(request):
@@ -101,9 +101,8 @@ NODE_DATA = st.dictionaries(keys=st.sampled_from(ATTRNAMES),
                             values=st.integers(min_value=0, max_value=MAX_NODES))
 
 ATTRS = st.lists(st.sampled_from(ATTRNAMES), unique=True, min_size=0, max_size=2)
-#ISO_DATA = st.fixed_dictionaries({'atomname': st.integers(max_value=MAX_NODES, min_value=0),
-#                                  'element': st.integers(max_value=MAX_NODES, min_value=0)})
-ISO_DATA = st.dictionaries(keys=st.sampled_from(ATTRNAMES), values=st.integers(max_value=MAX_NODES, min_value=0))
+ISO_DATA = st.dictionaries(keys=st.sampled_from(ATTRNAMES),
+                           values=st.integers(max_value=MAX_NODES, min_value=0))
 
 ISO_BUILDER = graph_builder(node_data=ISO_DATA, min_nodes=0, max_nodes=MAX_NODES,
                             edge_data=ISO_DATA,
@@ -125,7 +124,8 @@ def test_hypo_symmetric_self_isomorphism(subgraph, attrs):
     note(("Graph nodes", subgraph.nodes(data=True)))
     note(("Graph edges", subgraph.edges(data=True)))
 
-    ismags = vermouth.ismags.ISMAGS(subgraph, subgraph, node_match=node_match, edge_match=node_match)
+    ismags = vermouth.ismags.ISMAGS(subgraph, subgraph, node_match=node_match,
+                                    edge_match=node_match)
 
     found = make_into_set(ismags.find_subgraphs(True))
     note(("Found", found))
@@ -151,9 +151,11 @@ def test_isomorphism_nonmatch(graph, subgraph, attrs):
     note(("Subgraph nodes", subgraph.nodes(data=True)))
     note(("Subgraph edges", subgraph.edges(data=True)))
 
-    matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match, edge_match=node_match)
+    matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match,
+                                          edge_match=node_match)
     expected = make_into_set(matcher.subgraph_isomorphisms_iter())
-    ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match, edge_match=node_match)
+    ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match,
+                                    edge_match=node_match)
 
     asymmetric = make_into_set(ismags.find_subgraphs(False))
     symmetric = make_into_set(ismags.find_subgraphs(True))
@@ -192,9 +194,11 @@ def test_isomorphism_match(data):
     note(("Subgraph nodes", subgraph.nodes(data=True)))
     note(("Subgraph edges", subgraph.edges(data=True)))
 
-    matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match, edge_match=node_match)
+    matcher = nx.isomorphism.GraphMatcher(graph, subgraph, node_match=node_match,
+                                          edge_match=node_match)
     expected = make_into_set(matcher.subgraph_isomorphisms_iter())
-    ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match, edge_match=node_match)
+    ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match,
+                                    edge_match=node_match)
 
     asymmetric = make_into_set(ismags.find_subgraphs(False))
     symmetric = make_into_set(ismags.find_subgraphs(True))
