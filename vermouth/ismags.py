@@ -383,6 +383,23 @@ class ISMAGS:
             node_partitions = make_partitions((n for p in node_partitions for n in p), equal_color)
         return node_partitions
 
+    def _edges_of_same_color(self, sgn1, sgn2):
+        """
+        Returns all edges in :attr:`graph` that have the same colour as the
+        edge between sgn1 and sgn2 in :attr:`subgraph`.
+        """
+        if (sgn1, sgn2) in self._sge_colors:
+            # FIXME directed graphs
+            sge_color = self._sge_colors[sgn1, sgn2]
+        else:
+            sge_color = self._sge_colors[sgn2, sgn1]
+        if sge_color in self._edge_compatibility:
+            ge_color = self._edge_compatibility[sge_color]
+            g_edges = self._ge_partitions[ge_color]
+        else:
+            g_edges = []
+        return g_edges
+
     def _map_nodes(self, sgn, candidates, constraints, mapping=None):
         """
         Find all subgraphs honoring constraints.
@@ -394,7 +411,7 @@ class ISMAGS:
 
         # Note, we modify candidates here. Doesn't seem to affect results, but
         # remember this.
-        candidates = candidates.copy()
+        #candidates = candidates.copy()
         sgn_candidates = intersect(candidates[sgn])
         candidates[sgn] = frozenset([sgn_candidates])
         for gn in sgn_candidates:
@@ -421,54 +438,142 @@ class ISMAGS:
                 # something
                 continue
 
+            # REDUCTION and COMBINATION
             mapping[sgn] = gn
+            # BASECASE
             if set(self.subgraph.nodes) == set(mapping.keys()):
                 yield {v: k for k, v in mapping.items()}
 #                yield mapping.copy()
-            else:
-                new_sgn2_candidates = defaultdict(set)
-                for sgn2 in self.subgraph[sgn]:
-                    if (sgn, sgn2) in self._sge_colors:
-                        # FIXME directed graphs
-                        sge_color = self._sge_colors[sgn, sgn2]
-                    else:
-                        sge_color = self._sge_colors[sgn2, sgn]
-                    if sge_color in self._edge_compatibility:
-                        ge_color = self._edge_compatibility[sge_color]
-                        g_edges = self._ge_partitions[ge_color]
-                    else:
-                        g_edges = []
+                continue
 
+            new_candidates = candidates.copy()
+            sgn_neighbours = self.subgraph[sgn]
+            not_gn_neighbours = set(self.graph.nodes) - set(self.graph[gn])
+            for sgn2 in self.subgraph:
+                if sgn2 not in sgn_neighbours:
+                    gn2_options = not_gn_neighbours
+                else:
                     # Get all edges to gn of the right color:
+                    g_edges = self._edges_of_same_color(sgn, sgn2)
                     # FIXME directed graphs
-                    reverse_edges = map(tuple, map(reversed, self.graph.edges(nbunch=gn)))
-                    gn_edges = set(self.graph.edges(nbunch=gn)).union(reverse_edges)
-                    g_edges = set(g_edges).intersection(gn_edges)
-                    # And all nodes involved in those.
-                    g_nodes = {n for e in g_edges for n in e}
-                    # Node color compatibility should be taken care of by the
-                    # initial candidate lists made by find_subgraphs
-                    new_sgn2_candidates[sgn2].update(g_nodes)
-                # For every node sgn2 that does not have a connection to sgn,
-                # it's candidates can not have a connection to gn
-                for sgn2 in set(self.subgraph) - set(self.subgraph[sgn]):
-                    new_sgn2_candidates[sgn2] = set(self.graph.nodes) - set(self.graph[gn])
+                    # And all nodes involved in those which are connected to gn
+                    gn2_options = {n for e in g_edges for n in e if gn in e}
+                # Node color compatibility should be taken care of by the
+                # initial candidate lists made by find_subgraphs
 
-                new_candidates = candidates.copy()
-                for sgn2, options in new_sgn2_candidates.items():
-
-                    new_candidates[sgn2] = new_candidates[sgn2].union([frozenset(options)])
-                # The next node is the one that is unmapped and has fewest
-                # candidates
-                next_sgn = min(set(self.subgraph.nodes) - set(mapping.keys()),
-                               key=lambda n: min(new_candidates[n], key=len))
-                yield from self._map_nodes(next_sgn,
-                                           new_candidates,
-                                           constraints,
-                                           mapping)
+                # Add gn2_options to the right collection. Since new_candidates
+                # is a dict of frozensets of frozensets of node indices it's
+                # a bit clunky. We can't do .add, and + also doesn't work. We
+                # could do |, but I deem union to be clearer.
+                new_candidates[sgn2] = new_candidates[sgn2].union([frozenset(gn2_options)])
+            # The next node is the one that is unmapped and has fewest
+            # candidates
+            # Pylint disables because it's a one-shot function.
+            next_sgn = min(set(self.subgraph.nodes) - set(mapping.keys()),
+                           key=lambda n: min(new_candidates[n], key=len))  # pylint: disable=cell-var-from-loop
+            yield from self._map_nodes(next_sgn,
+                                       new_candidates,
+                                       constraints,
+                                       mapping)
             # Unmap sgn-gn. Strictly not necessary since it'd get overwritten
             # when making a new mapping for sgn.
             #del mapping[sgn]
+
+    @staticmethod
+    def _find_permutations(top_partitions, bottom_partitions):
+        """
+        Return the pairs of top/bottom partitions where the partitions are
+        different. Ensures that all partitions in both top and bottom
+        partitions have size 1.
+        """
+        # Find permutations
+        permutations = set()
+        for top, bot in zip(top_partitions, bottom_partitions):
+            # top and bot have only one element
+            if len(top) != 1 or len(bot) != 1:
+                raise IndexError("Not all nodes are coupled. This is"
+                                 " impossible: {}, {}".format(top_partitions,
+                                                              bottom_partitions))
+            if top != bot:
+                permutations.add(frozenset((next(iter(top)), next(iter(bot)))))
+        return permutations
+
+    @staticmethod
+    def _update_orbits(orbits, permutations):
+        """
+        Update orbits based on permutations. Orbits is modified in place.
+        For every pair of items in permutations their respective orbits are
+        merged.
+        """
+        for permutation in permutations:
+            node, node2 = sorted(permutation)
+            # Find the orbits that contain node and node2, and replace the
+            # orbit containing node with the union
+            first = second = None
+            for idx, orbit in enumerate(orbits):
+                if first is not None and second is not None:
+                    break
+                if node in orbit:
+                    first = idx
+                if node2 in orbit:
+                    second = idx
+            if first != second:
+                orbits[first].update(orbits[second])
+                del orbits[second]
+
+    @staticmethod
+    def _find_coupled_nodes(top_partitions, bottom_partitions):
+        """
+        Find all nodes in top and bottom partitions that are coupled. These
+        are nodes that are in their own partition in both top and bottom.
+        """
+        coupled = {}
+        for top, bot in zip(top_partitions, bottom_partitions):
+            if len(top) == len(bot) == 1:
+                coupled[next(iter(top))] = next(iter(bot))
+        return coupled
+
+    def _couple_nodes(self, top_partitions, bottom_partitions, pair_idx,
+                      t_node, b_node, graph, edge_colors):
+        """
+        Generate new partitions from top and bottom_partitions where t_node is
+        coupled to b_node. pair_idx is the index of the partitions where t and
+        b_node can be found.
+        """
+        t_partition = top_partitions[pair_idx]
+        b_partition = bottom_partitions[pair_idx]
+        assert t_node in t_partition and b_node in b_partition
+        # Couple node to node2. This means they get their own partition
+        new_top_partitions = [top.copy() for top in top_partitions]
+        new_bottom_partitions = [bot.copy() for bot in bottom_partitions]
+        new_t_groups = {t_node}, t_partition - {t_node}
+        new_b_groups = {b_node}, b_partition - {b_node}
+        # Replace the old partitions with the coupled ones
+        del new_top_partitions[pair_idx]
+        del new_bottom_partitions[pair_idx]
+        new_top_partitions[pair_idx:pair_idx] = new_t_groups
+        new_bottom_partitions[pair_idx:pair_idx] = new_b_groups
+
+        new_top_partitions = self._refine_node_partitions(graph,
+                                                          new_top_partitions,
+                                                          edge_colors)
+        new_bottom_partitions = self._refine_node_partitions(graph,
+                                                             new_bottom_partitions,
+                                                             edge_colors)
+        # We collect the nodes that are coupled so we can use it as a
+        # sanity check.
+        coupled = self._find_coupled_nodes(new_top_partitions, new_bottom_partitions)
+        # Sort the partitions by size. This works by the grace that sort
+        # is stable. We do this so we can deal with partitions like this:
+        # [{4}, {5, 6}, {0}, {1}, {3}, {2}] [{0, 4}, {5}, {6}, {1}, {3}, {2}]
+        new_top_partitions = sorted(new_top_partitions, key=len)
+        new_bottom_partitions = sorted(new_bottom_partitions, key=len)
+        new_coupled = self._find_coupled_nodes(new_top_partitions, new_bottom_partitions)
+        # Make sure coupled <= new_coupled. This means that everything
+        # that was coupled still is. There may be more items coupled now
+        # though, and that's fine.
+        assert all(new_coupled[k] == v for k, v in coupled.items())
+        return new_top_partitions, new_bottom_partitions
 
     def _process_opp(self, graph, top_partitions, bottom_partitions,
                      edge_colors, orbits=None, cosets=None):
@@ -478,107 +583,47 @@ class ISMAGS:
         """
         if orbits is None:
             orbits = [{node} for node in graph.nodes]
+        else:
             # Note that we don't copy orbits when we are given one. This means
             # we leak information between the recursive branches. This is
             # intentional!
+            orbits = orbits
         if cosets is None:
             cosets = {}
         else:
             cosets = cosets.copy()
+
+        assert all(len(t_p) == len(b_p) for t_p, b_p in zip(top_partitions, bottom_partitions))
+
+        # BASECASE
         if all(len(top) == 1 for top in top_partitions):
             # All nodes are mapped
-            # Find permutations
-            permutations = set()
-            for top, bot in zip(top_partitions, bottom_partitions):
-                # top and bot have only one element
-                if len(bot) != 1:
-                    raise IndexError("Not all nodes are coupled. This is"
-                                     " impossible: {}, {}".format(top_partitions,
-                                                                  bottom_partitions))
-                if top != bot:
-                    permutations.add(frozenset((next(iter(top)), next(iter(bot)))))
-            # update orbits
-            for permutation in permutations:
-                node, node2 = sorted(permutation)
-                # Find the orbits that contain node and node2, and replace the
-                # orbit containing node with the union
-                first = second = None
-                for idx, orbit in enumerate(orbits):
-                    if first is not None and second is not None:
-                        break
-                    if node in orbit:
-                        first = idx
-                    if node2 in orbit:
-                        second = idx
-                if first != second:
-                    orbits[first].update(orbits[second])
-                    del orbits[second]
+            permutations = self._find_permutations(top_partitions, bottom_partitions)
+            self._update_orbits(orbits, permutations)
             if permutations:
                 return [permutations], cosets
             else:
                 return [], cosets
 
         permutations = []
-        found = False
-        # Find the node with the lowest id that is not yet mapped. Not yet
-        # mapped means that it's in a partition that does not have size 1. So
-        # find the partition that contains node, and it's size > 1.
-        for node in sorted(graph.nodes):
-            partitions = enumerate(zip(top_partitions, bottom_partitions))
-            for pair_idx, (t_partition, b_partition) in partitions:
-                # equivalent to: if node in t_partition and len(t_partition) > 1
-                if {node} < t_partition:
-                    # Found it!
-                    found = True
-                    break
-            if found:
-                break
-        else:  # No break
-            raise RuntimeError('Could not find node {} in any of these'
-                               ' partitions: {}'.format(node, top_partitions))
+        unmapped_nodes = {(node, idx)
+                          for idx, t_partition in enumerate(top_partitions)
+                          for node in t_partition if len(t_partition) > 1}
+        node, pair_idx = min(unmapped_nodes)
+        b_partition = bottom_partitions[pair_idx]
+
         for node2 in sorted(b_partition):
-            if node != node2 and any(node in orbit and node2 in orbit for orbit in orbits):
-                # Orbit prune branch
-                continue
             if len(b_partition) == 1:
                 # Can never result in symmetry
                 continue
-            # Couple node to node2. This means they get their own partition
-            new_top_partitions = [top.copy() for top in top_partitions]
-            new_bottom_partitions = [bot.copy() for bot in bottom_partitions]
-            new_t_groups = {node}, t_partition - {node}
-            new_b_groups = {node2}, b_partition - {node2}
-            new_t_groups = reversed(new_t_groups)
-            new_b_groups = reversed(new_b_groups)
-            # Replace the old partitions with the coupled ones
-            del new_top_partitions[pair_idx]
-            del new_bottom_partitions[pair_idx]
-            new_top_partitions[pair_idx:pair_idx] = new_t_groups
-            new_bottom_partitions[pair_idx:pair_idx] = new_b_groups
-
-            new_top_partitions = self._refine_node_partitions(graph,
-                                                              new_top_partitions,
-                                                              edge_colors)
-            new_bottom_partitions = self._refine_node_partitions(graph,
-                                                                 new_bottom_partitions,
-                                                                 edge_colors)
-            # Sort the partitions by size. This works by the grace that sort
-            # is stable. We do this so we can deal with partitions like this:
-            # [{4}, {5, 6}, {0}, {1}, {3}, {2}] [{0, 4}, {5}, {6}, {1}, {3}, {2}]
-
-            # We collect the nodes that are coupled so we can use it as a
-            # sanity check.
-            fixed_couplings = {}
-            for top, bot in zip(new_top_partitions, new_bottom_partitions):
-                if len(top) == len(bot) == 1:
-                    fixed_couplings[next(iter(top))] = next(iter(bot))
-
-            new_top_partitions = sorted(new_top_partitions, key=len)
-            new_bottom_partitions = sorted(new_bottom_partitions, key=len)
-
-            for top, bot in zip(new_top_partitions, new_bottom_partitions):
-                if len(top) == len(bot) == 1 and next(iter(top)) in fixed_couplings:
-                    assert fixed_couplings[next(iter(top))] == next(iter(bot))
+            if node != node2 and any(node in orbit and node2 in orbit for orbit in orbits):
+                # Orbit prune branch
+                continue
+            # REDUCTION
+            partitions = self._couple_nodes(top_partitions, bottom_partitions,
+                                            pair_idx, node, node2, graph,
+                                            edge_colors)
+            new_top_partitions, new_bottom_partitions = partitions
 
             new_perms, new_cosets = self._process_opp(graph,
                                                       new_top_partitions,
@@ -586,17 +631,20 @@ class ISMAGS:
                                                       edge_colors,
                                                       orbits,
                                                       cosets)
+            # COMBINATION
             permutations += new_perms
             cosets.update(new_cosets)
 
         mapped = {k for top, bottom in zip(top_partitions, bottom_partitions)
                   for k in top if len(top) == 1 and top == bottom}
-        ks = {k for k in sorted(graph.nodes) if k < node}
+        # Protected against undefined loop variables by raising a RuntimeError
+        # if the loop terminates without defining the variable in question.
+        ks = {k for k in graph.nodes if k < node}  # pylint: disable=undefined-loop-variable
         # Have all nodes with ID < node been mapped?
         find_coset = ks <= mapped
         if find_coset:
             # Find the orbit that contains node
             for orbit in orbits:
-                if node in orbit:
-                    cosets[node] = orbit.copy()
+                if node in orbit:  # pylint: disable=undefined-loop-variable
+                    cosets[node] = orbit.copy()  # pylint: disable=undefined-loop-variable
         return permutations, cosets
