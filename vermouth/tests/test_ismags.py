@@ -17,7 +17,8 @@ Contains unittests for vermouth.ismags.
 
 # no-member because module networkx does indeed have a member isomorphism;
 # redefined-outer-name because pylint does not like fixtures;
-# pylint: disable=no-member, redefined-outer-name
+# protected-access because it's tests.
+# pylint: disable=no-member, redefined-outer-name, protected-access
 
 import hypothesis.strategies as st
 from hypothesis import given, note, settings
@@ -167,7 +168,9 @@ def test_isomorphism_nonmatch(graph, subgraph, attrs):
     assert asymmetric == expected
     assert symmetric <= asymmetric
     if symmetric == asymmetric and expected:
-        assert ismags.analyze_symmetry() == ([], {})
+        assert ismags.analyze_symmetry(subgraph,
+                                       ismags._sgn_partitions,
+                                       ismags._sge_colors) == ([], {})
 
 
 @settings(max_examples=500)
@@ -210,4 +213,6 @@ def test_isomorphism_match(data):
     assert asymmetric == expected
     assert symmetric <= asymmetric
     if symmetric == asymmetric and expected:
-        assert ismags.analyze_symmetry() == ([], {})
+        assert ismags.analyze_symmetry(subgraph,
+                                       ismags._sgn_partitions,
+                                       ismags._sge_colors) == ([], {})

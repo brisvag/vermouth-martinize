@@ -116,8 +116,35 @@ class ISMAGS:
     ----------
     graph: networkx.Graph
     subgraph: networkx.Graph
+    node_equality: collections.abc.Callable
+        The function called to see if two nodes should be considered equal.
+        It's signature looks like this:
+        ``f(graph1: networkx.Graph, node1, graph2: networkx.Graph, node2) -> bool``.
+        `node1` is a node in `graph1`, and `node2` a node in `graph2`.
+    edge_equality: collections.abc.Callable
+        The function called to see if two edges should be considered equal.
+        It's signature looks like this:
+        ``f(graph1: networkx.Graph, edge1, graph2: networkx.Graph, edge2) -> bool``.
+        `edge1` is an edge in `graph1`, and `edge2` an edge in `graph2`.
     """
     def __init__(self, graph, subgraph, node_match=None, edge_match=None):
+        """
+        Parameters
+        ----------
+        graph: networkx.Graph
+        subgraph: networkx.Graph
+        node_match: collections.abc.Callable
+            Function used to determine whether two nodes are equivalent. It's
+            signature should look like ``f(n1: dict, n2: dict) -> bool``, with
+            `n1` and `n2` node property dicts. See also:
+            `networkx.isomorphism.categorical_node_match`.
+        edge_match: collections.abc.Callable
+            Function used to determine whether two edges are equivalent. It's
+            signature should look like ``f(e1: dict, e2: dict) -> bool``, with
+            `e1` and `e2` edge property dicts. See also:
+            `networkx.isomorphism.categorical_edge_match`.
+        """
+        # TODO: allow for precomputed partitions and colors
         self.graph = graph
         self.subgraph = subgraph
 
@@ -261,6 +288,8 @@ class ISMAGS:
         dict
             The found isomorphism mappings of {graph_node: subgraph_node}.
         """
+        # The networkx VF2 algorithm is slightly funny in when it yields an
+        # empty dict and when not.
         if not self.subgraph:
             yield {}
             return
@@ -270,7 +299,9 @@ class ISMAGS:
             return
 
         if symmetry:
-            _, cosets = self.analyze_symmetry()
+            _, cosets = self.analyze_symmetry(self.subgraph,
+                                              self._sgn_partitions,
+                                              self._sge_colors)
             constraints = self._make_constraints(cosets)
         else:
             constraints = []
@@ -304,7 +335,7 @@ class ISMAGS:
         else:
             return
 
-    def analyze_symmetry(self):
+    def analyze_symmetry(self, graph, node_partitions, edge_colors):
         """
         Find a minimal set of permutations and corresponding co-sets that
         describe the symmetry of :attr:`subgraph`.
@@ -314,17 +345,17 @@ class ISMAGS:
         tuple[set[frozenset], dict]
             The found permutations and co-sets. Permutations is a set of
             frozenset of pairs of node keys which can be exchanged without
-            changing subgraph. The co-sets is a dictionary of node key: set of
-            node keys. Every key, value describes which values can be
+            changing :attr:`subgraph`. The co-sets is a dictionary of node key:
+            set of node keys. Every key, value describes which values can be
             interchanged while keeping all nodes less than the key the same.
         """
-        node_partitions = self._refine_node_partitions(self.subgraph,
-                                                       self._sgn_partitions,
-                                                       self._sge_colors)
-        permutations, cosets = self._process_opp(self.subgraph,
+        node_partitions = self._refine_node_partitions(graph,
+                                                       node_partitions,
+                                                       edge_colors)
+        permutations, cosets = self._process_opp(graph,
                                                  node_partitions,
                                                  node_partitions,
-                                                 self._sge_colors)
+                                                 edge_colors)
         return permutations, cosets
 
     @staticmethod
