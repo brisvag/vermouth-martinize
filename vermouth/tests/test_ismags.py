@@ -100,7 +100,7 @@ def test_asymmetric_self_isomorphism(graphs):
 # pylint: disable=no-value-for-parameter, no-member
 
 
-MAX_NODES = 15
+MAX_NODES = 10
 ATTRNAMES = ['attr1', 'attr2']
 NODE_DATA = st.dictionaries(keys=st.sampled_from(ATTRNAMES),
                             values=st.integers(min_value=0, max_value=MAX_NODES))
@@ -116,7 +116,7 @@ MCS_BUILDER = graph_builder(node_data=ISO_DATA, min_nodes=0, max_nodes=6,
                             node_keys=st.integers(max_value=MAX_NODES, min_value=0))
 
 
-@settings(max_examples=500)
+@settings(max_examples=250)
 @given(subgraph=ISO_BUILDER, attrs=st.one_of(st.none(), ATTRS))
 def test_hypo_symmetric_self_isomorphism(subgraph, attrs):
     """
@@ -140,7 +140,7 @@ def test_hypo_symmetric_self_isomorphism(subgraph, attrs):
     assert found == make_into_set([{n: n for n in subgraph}])
 
 
-@settings(max_examples=500)
+@settings(max_examples=250)
 @given(graph=ISO_BUILDER, subgraph=ISO_BUILDER, attrs=st.one_of(st.none(), ATTRS))
 def test_isomorphism_nonmatch(graph, subgraph, attrs):
     """
@@ -198,7 +198,7 @@ def test_isomorphism_nonmatch(graph, subgraph, attrs):
                                        ismags._sge_colors) != ([], {})
 
 
-@settings(max_examples=500)
+@settings(max_examples=250)
 @given(st.data())
 def test_isomorphism_match(data):
     """
