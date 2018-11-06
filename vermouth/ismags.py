@@ -523,7 +523,7 @@ class ISMAGS:
 
         .. automethod:: find_isomorphisms
         """
-        return self.find_subgraphs(symmetry)
+        return self.find_isomorphisms(symmetry)
 
     def _find_nodecolor_candidates(self):
         """
