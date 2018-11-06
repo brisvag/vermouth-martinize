@@ -76,7 +76,7 @@ def test_symmetric_self_isomorphism(graphs):
     between a graph and itself
     """
     ismags = vermouth.ismags.ISMAGS(graphs, graphs)
-    iso = list(ismags.find_subgraphs(True))
+    iso = list(ismags.find_isomorphisms(True))
     assert make_into_set(iso) == make_into_set([{n: n for n in graphs}])
 
     graph_matcher = nx.isomorphism.GraphMatcher(graphs, graphs)
@@ -89,7 +89,7 @@ def test_asymmetric_self_isomorphism(graphs):
     Compare with reference implementation
     """
     ismags = vermouth.ismags.ISMAGS(graphs, graphs)
-    ismags_answer = list(ismags.find_subgraphs(False))
+    ismags_answer = list(ismags.find_isomorphisms(False))
     graph_matcher = nx.isomorphism.GraphMatcher(graphs, graphs)
     nx_answer = list(graph_matcher.isomorphisms_iter())
     assert make_into_set(ismags_answer) == make_into_set(nx_answer)
@@ -134,7 +134,7 @@ def test_hypo_symmetric_self_isomorphism(subgraph, attrs):
     ismags = vermouth.ismags.ISMAGS(subgraph, subgraph, node_match=node_match,
                                     edge_match=node_match)
 
-    found = make_into_set(ismags.find_subgraphs(True))
+    found = make_into_set(ismags.find_isomorphisms(True))
     note(("Found", found))
 
     assert found == make_into_set([{n: n for n in subgraph}])
@@ -168,12 +168,12 @@ def test_isomorphism_nonmatch(graph, subgraph, attrs):
     a_ism_time = perf_counter()
     ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match,
                                     edge_match=node_match)
-    asymmetric = make_into_set(ismags.find_subgraphs(False))
+    asymmetric = make_into_set(ismags.find_isomorphisms(False))
     a_ism_time -= perf_counter()
     s_ism_time = perf_counter()
     ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match,
                                     edge_match=node_match)
-    symmetric = make_into_set(ismags.find_subgraphs(True))
+    symmetric = make_into_set(ismags.find_isomorphisms(True))
     s_ism_time -= perf_counter()
 
     note(("Symmetric", symmetric))
@@ -230,12 +230,12 @@ def test_isomorphism_match(data):
     a_ism_time = perf_counter()
     ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match,
                                     edge_match=node_match)
-    asymmetric = make_into_set(ismags.find_subgraphs(False))
+    asymmetric = make_into_set(ismags.find_isomorphisms(False))
     a_ism_time -= perf_counter()
     s_ism_time = perf_counter()
     ismags = vermouth.ismags.ISMAGS(graph, subgraph, node_match=node_match,
                                     edge_match=node_match)
-    symmetric = make_into_set(ismags.find_subgraphs(True))
+    symmetric = make_into_set(ismags.find_isomorphisms(True))
     s_ism_time -= perf_counter()
 
     note(("Symmetric", symmetric))
