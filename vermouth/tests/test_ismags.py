@@ -95,6 +95,26 @@ def test_asymmetric_self_isomorphism(graphs):
     assert make_into_set(ismags_answer) == make_into_set(nx_answer)
 
 
+def test_broken_edgecase():
+    """
+    In this edgecase the ordering of the nodes matters for the symmetries
+    found. This is a bad thing. It happens, because _refine_node_partitions in
+    _couple_nodes does *not* switch node orders, causing it to produce an
+    invalid coupling, losing out on a permutation.
+    """
+    graph = nx.Graph()
+    graph.add_path(range(5))
+    graph.add_edges_from([(2, 5), (5, 6)])
+
+    ismags = vermouth.ismags.ISMAGS(graph, graph)
+    ismags_answer = list(ismags.find_isomorphisms(True))
+    assert len(ismags_answer) == 1
+
+    graph = nx.relabel_nodes(graph, {0: 0, 1: 1, 2: 2, 3: 3, 4: 6, 5: 4, 6: 5})
+    ismags = vermouth.ismags.ISMAGS(graph, graph)
+    ismags_answer = list(ismags.find_isomorphisms(True))
+    assert len(ismags_answer) == 1
+
 # no-value-for-parameter because `draw` is not explicitely passed;
 # no-member because module networkx does indeed have a member isomorphism.
 # pylint: disable=no-value-for-parameter, no-member
