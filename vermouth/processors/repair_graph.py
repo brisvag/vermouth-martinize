@@ -84,18 +84,22 @@ def make_reference(mol):
         # We do this, because the ISMAGS algorithm prefers to match nodes with
         # lower IDs. Note that short names sort before long names, so if there
         # are nodes missing it may still give the "wrong" answer.
-        new_residue_names = {name: idx for idx, name in enumerate(sorted(residue, key=lambda jdx: residue.nodes[jdx].get('atomname', '')))}
-        new_reference_names = {name: idx for idx, name in enumerate(sorted(reference, key=lambda jdx: reference.nodes[jdx].get('atomname', '')))}
+        # We use tuples as the new node keys so there's no overlap between
+        # existing keys -- which means we can relabel things in-place.
+        new_residue_names = {name: (idx,) for idx, name in
+                             zip(residue, sorted(residue, key=lambda jdx: residue.nodes[jdx].get('atomname', '')))}
+        new_reference_names = {name: (idx,) for idx, name
+                               in zip(reference, sorted(reference, key=lambda jdx: reference.nodes[jdx].get('atomname', '')))}
         old_res_names = {v: k for k, v in new_residue_names.items()}
         old_ref_names = {v: k for k, v in new_reference_names.items()}
 
-        res_copy = nx.relabel_nodes(residue, new_residue_names, copy=True)
-        ref_copy = nx.relabel_nodes(reference, new_reference_names, copy=True)
+        nx.relabel_nodes(residue, new_residue_names, copy=False)
+        nx.relabel_nodes(reference, new_reference_names, copy=False)
 
-        # Fun fact. If we assume res_copy > ref_copy, the tests run ~30 times
+        # Fun fact. If we assume residue >= reference the tests run ~30 times
         # faster, and without failures. But, in real life examples, assuming
-        # ref_copy > res_copy is a far better idea.
-        ismags = ISMAGS(ref_copy, res_copy, node_match=nx.isomorphism.categorical_node_match('element', None))
+        # residue <= reference is a far better idea.
+        ismags = ISMAGS(reference, residue, node_match=nx.isomorphism.categorical_node_match('element', None))
         # Finding the largest common subgraph is expensive, but the first step
         # is to try and find a subgraph isomorphism between
         # residue >= reference, so best case it makes no difference, and worst
@@ -106,10 +110,13 @@ def make_reference(mol):
         warned = False
         for match in match_iter:
             if not warned and len(match) != len(residue):
-                LOGGER.debug('Doing MCS matching for residue {}{}', resname,
-                             resid, type='performance')
+                # At this point we've already found the first largest common
+                # subgraph, so the warning is a little late, maybe.
+                LOGGER.debug('Doing maximum common subgraph matching for'
+                             ' residue {}{}', resname, resid,
+                             type='performance')
                 warned = True
-            score = rate_match(ref_copy, res_copy, match)
+            score = rate_match(reference, residue, match)
             if best_score is None or score > best_score:
                 best_score = score
                 matches = [match]
@@ -120,13 +127,16 @@ def make_reference(mol):
             matches[idx] = {old_ref_names[ref]: old_res_names[res]
                             for ref, res in match.items()}
 
+        # Unsort graphs
+        nx.relabel_nodes(residue, old_res_names, copy=False)
+        nx.relabel_nodes(reference, old_ref_names, copy=False)
+
         if not matches:
             LOGGER.error("Can't find isomorphism between {}{} and its "
                          "reference.", resname, resid, type='inconsistent-data')
             raise ValueError
             continue
 
-        matches = maxes(matches, key=lambda m: rate_match(reference, residue, m))
         if len(matches) > 1:
             LOGGER.warning("More than one way to fit {}{} on it's reference."
                            " I'm picking one arbitrarily. You might want to"
