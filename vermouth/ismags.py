@@ -627,7 +627,7 @@ class ISMAGS:
                     # in refined with the same length, and their order
                     # matters.
                     # So option 1) Hit it with a big hammer and simply make all
-                    # permutations.
+                    # orderings.
                     permutations = cls._get_permutations_by_length(refined)
                     new_output = []
                     for n_p in output:
