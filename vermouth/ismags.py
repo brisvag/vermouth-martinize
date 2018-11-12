@@ -963,7 +963,7 @@ class ISMAGS:
                   for k in top if len(top) == 1 and top == bottom}
         ks = {k for k in graph.nodes if k < node}
         # Have all nodes with ID < node been mapped?
-        find_coset = ks <= mapped
+        find_coset = ks <= mapped and node not in cosets
         if find_coset:
             # Find the orbit that contains node
             for orbit in orbits:
