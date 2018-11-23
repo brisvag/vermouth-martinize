@@ -819,7 +819,7 @@ class ISMAGS:
 
             # Try the isomorphism first with the nodes with lowest ID. So sort
             # them. Those are more likely to be part of the final
-            # correspondence. This makes finding the first answer faster. In
+            # correspondence. This makes finding the first answer(s) faster. In
             # theory.
             for nodes in sorted(to_be_mapped, key=sorted):
                 # Find the isomorphism between subgraph[to_be_mapped] <= graph

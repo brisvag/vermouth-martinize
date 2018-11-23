@@ -135,6 +135,12 @@ def make_reference(mol):
             LOGGER.error("Can't find isomorphism between {}{} and its "
                          "reference.", resname, resid, type='inconsistent-data')
             continue
+        # TODO: Since we only have one isomorphism we don't know whether the
+        # assigment we're making is ambiguous. So iff the residue is small
+        # enough (or a flag is set, whatever), also find the second isomorphism
+        # and check whether it has the same number of correct atomnames. If so,
+        # issue a warning and carry on. We can't do this for all residues,
+        # since that takes a cup of coffee.
 
         # "unsort" the matches
         match = {old_ref_names[ref]: old_res_names[res] for ref, res in match.items()}
