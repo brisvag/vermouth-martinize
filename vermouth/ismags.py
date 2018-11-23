@@ -817,7 +817,11 @@ class ISMAGS:
             # There's no point in trying to find isomorphisms of
             # graph >= subgraph if subgraph has more nodes than graph.
 
-            for nodes in to_be_mapped:
+            # Try the isomorphism first with the nodes with lowest ID. So sort
+            # them. Those are more likely to be part of the final
+            # correspondence. This makes finding the first answer faster. In
+            # theory.
+            for nodes in sorted(to_be_mapped, key=sorted):
                 # Find the isomorphism between subgraph[to_be_mapped] <= graph
                 next_sgn = min(nodes, key=lambda n: min(candidates[n], key=len))
                 isomorphs = self._map_nodes(next_sgn, candidates, constraints,

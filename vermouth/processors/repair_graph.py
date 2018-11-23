@@ -99,6 +99,8 @@ def make_reference(mol):
         # ISMAGS does quite a lot of inequality comparisons, and those are way
         # faster for str/int. So, sacrifice the memory, and relabel by making a
         # new copy.
+
+        # TODO: include a geometric alignment in the sorting.
         new_residue_names = {old: new for new, old in enumerate(sorted(residue,
                              key=lambda jdx: (res_names[jdx] not in ref_names.values(), res_names[jdx])))}
         new_reference_names = {old: new for new, old in enumerate(sorted(reference,
@@ -110,7 +112,7 @@ def make_reference(mol):
         # It would be nice if we were able to relabel them in-place, but it
         # seems to make everything slower. See above.
         #nx.relabel_nodes(residue, new_residue_names, copy=False)
-        #x.relabel_nodes(reference, new_reference_names, copy=False)
+        #nx.relabel_nodes(reference, new_reference_names, copy=False)
         #res_copy = residue
         #ref_copy = reference
         res_copy = nx.relabel_nodes(residue, new_residue_names, copy=True)
@@ -124,45 +126,23 @@ def make_reference(mol):
         # residue <= reference, so best case it makes no difference, and worst
         # case we avoid trying to find that isomorphism twice.
         match_iter = ismags.largest_common_subgraph()
-        matches = []
-        best_score = None
-        warned = False
-        for match in match_iter:
-            if not warned and len(match) != len(residue):
-                # At this point we've already found the first largest common
-                # subgraph, so the warning is a little late, maybe.
-                LOGGER.debug('Doing maximum common subgraph matching for'
-                             ' residue {}{}', resname, resid,
-                             type='performance')
-                warned = True
-            score = rate_match(ref_copy, res_copy, match)
-            if best_score is None or score > best_score:
-                best_score = score
-                matches = [match]
-            elif score == best_score:
-                matches.append(match)
-        for idx, match in enumerate(matches):
-            # "unsort" the matches
-            matches[idx] = {old_ref_names[ref]: old_res_names[res]
-                            for ref, res in match.items()}
+        try:
+            # We take only the first found match, since because the nodes are
+            # sorted by atomname, and ISMAGS prefers to take nodes with low ID,
+            # that match should have most matching atomnames.
+            match = next(match_iter)
+        except StopIteration:
+            LOGGER.error("Can't find isomorphism between {}{} and its "
+                         "reference.", resname, resid, type='inconsistent-data')
+            continue
+
+        # "unsort" the matches
+        match = {old_ref_names[ref]: old_res_names[res] for ref, res in match.items()}
 
         # Unsort graphs
         #nx.relabel_nodes(residue, old_res_names, copy=False)
         #nx.relabel_nodes(reference, old_ref_names, copy=False)
 
-        if not matches:
-            LOGGER.error("Can't find isomorphism between {}{} and its "
-                         "reference.", resname, resid, type='inconsistent-data')
-            raise ValueError
-            continue
-
-        if len(matches) > 1:
-            LOGGER.warning("More than one way to fit {}{} on it's reference."
-                           " I'm picking one arbitrarily. You might want to"
-                           " fix at least some atomnames.", resname, resid,
-                           type='bad-atom-names')
-
-        match = matches[0]
         reference_graph.add_node(residx, chain=chain, reference=reference,
                                  found=residue, resname=resname, resid=resid,
                                  match=match)
