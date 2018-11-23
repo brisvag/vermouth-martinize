@@ -98,7 +98,7 @@ References
     .. [2] https://en.wikipedia.org/wiki/Maximum_common_induced_subgraph
 """
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 from functools import reduce, wraps
 import itertools
 
@@ -406,6 +406,11 @@ class ISMAGS:
             constraints = []
 
         candidates = self._find_nodecolor_candidates()
+        la_candidates = self._get_lookahead_candidates()
+        for sgn in self.subgraph:
+            extra_candidates = la_candidates[sgn]
+            if extra_candidates:
+                candidates[sgn] = candidates[sgn].union([frozenset(extra_candidates)])
 
         if any(candidates.values()):
             start_sgn = min(candidates, key=lambda n: min(candidates[n], key=len))
@@ -413,6 +418,55 @@ class ISMAGS:
             yield from self._map_nodes(start_sgn, candidates, constraints)
         else:
             return
+
+    @staticmethod
+    def _find_neighbor_color_count(graph, node, node_color, edge_color):
+        """
+        For `node` in `graph`, count the number of edges of a specific color
+        it has to nodes of a specific color.
+        """
+        counts = Counter()
+        neighbors = graph[node]
+        for neighbor in neighbors:
+            n_color = node_color[neighbor]
+            if (node, neighbor) in edge_color:
+                e_color = edge_color[node, neighbor]
+            else:
+                e_color = edge_color[neighbor, node]
+            counts[e_color, n_color] += 1
+        return counts
+
+    def _get_lookahead_candidates(self):
+        """
+        Returns a mapping of {subgraph node: collection of graph nodes} for
+        which the graph nodes are feasible candidates for the subgraph node, as
+        determined by looking ahead one edge.
+        """
+        g_counts = {}
+        for gn in self.graph:
+            g_counts[gn] = self._find_neighbor_color_count(self.graph, gn,
+                                                           self._gn_colors,
+                                                           self._ge_colors)
+        candidates = defaultdict(set)
+        for sgn in self.subgraph:
+            sg_count = self._find_neighbor_color_count(self.subgraph, sgn,
+                                                       self._sgn_colors,
+                                                       self._sge_colors)
+            new_sg_count = Counter()
+            for (sge_color, sgn_color), count in sg_count.items():
+                try:
+                    ge_color = self._edge_compatibility[sge_color]
+                    gn_color = self._node_compatibility[sgn_color]
+                except KeyError:
+                    pass
+                else:
+                    new_sg_count[ge_color, gn_color] = count
+            
+            for gn, g_count in g_counts.items():
+                if all(new_sg_count[x] <= g_count[x] for x in new_sg_count):
+                    # Valid candidate
+                    candidates[sgn].add(gn)
+        return candidates
 
     def largest_common_subgraph(self, symmetry=True):
         """
@@ -709,7 +763,7 @@ class ISMAGS:
                 continue
 
             new_candidates = candidates.copy()
-            sgn_neighbours = self.subgraph[sgn]
+            sgn_neighbours = set(self.subgraph[sgn])
             not_gn_neighbours = set(self.graph.nodes) - set(self.graph[gn])
             for sgn2 in self.subgraph:
                 if sgn2 not in sgn_neighbours:
