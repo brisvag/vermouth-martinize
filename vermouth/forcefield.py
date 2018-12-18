@@ -43,7 +43,7 @@ class ForceField(object):
     def __init__(self, directory=None, name=None):
         self.blocks = {}
         self.links = []
-        self.modifications = []
+        self.modifications = {}
         self.renamed_residues = {}
         self.variables = {}
         self.name = None
