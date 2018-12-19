@@ -34,7 +34,7 @@ class ForceField(object):
     ----------
     blocks: dict
     links: list
-    modifications: list
+    modifications: dict
     renamed_residues: dict
     name: str
     variables: dict

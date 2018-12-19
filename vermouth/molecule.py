@@ -57,12 +57,8 @@ class LinkPredicate:
 
     def match(self, node, key):
         """
-        Do the comparison with the reference value.
-
-        Notes
-        -----
-        This function **must** be defined by the subclasses. This docstring
-        describe the *expected* format of the method.
+        Do the comparison with the reference value. Returns ``True`` iff
+        `node[key]` is the same type as `self`, and the values are equal.
 
         Parameters
         ----------
@@ -357,9 +353,7 @@ class Molecule(nx.Graph):
         -------
         Molecule
         """
-        new = self.subgraph(self.nodes)
-        new.name = self.name
-        return new
+        return self.subgraph(self.nodes)
 
     def subgraph(self, nodes):
         """
@@ -374,6 +368,7 @@ class Molecule(nx.Graph):
         subgraph.meta = copy.copy(self.meta)
         subgraph._force_field = self._force_field
         subgraph.nrexcl = self.nrexcl
+        subgraph.name = self.name
 
         node_copies = [(node, copy.copy(self.nodes[node])) for node in nodes]
         subgraph.add_nodes_from(node_copies)
@@ -582,7 +577,7 @@ class Molecule(nx.Graph):
             A dict mapping the node indices of the added `molecule` to their
             new indices in this molecule.
         """
-        if self.force_field.name != molecule.force_field.name:
+        if getattr(self.force_field, 'name', '') != getattr(molecule.force_field, 'name', ''):
             raise ValueError(
                 'Cannot merge molecules with different force fields.'
             )
