@@ -506,11 +506,11 @@ def test_is_param_effector(token, expected):
 
 
 @pytest.mark.parametrize('tokens, existing', (
-    (['A'], []),
-    (['A', 'B'], []),
-    (['A', 'B'], ['X', 'Y']),
-    ([], []),
-    ([], ['X', 'Y']),
+    (['A'], set()),
+    (['A', 'B'], set()),
+    (['A', 'B'], {'X', 'Y'}),
+    ([], set()),
+    ([], {'X', 'Y'}),
 ))
 def test_parse_features(tokens, existing):
     """
@@ -519,7 +519,7 @@ def test_parse_features(tokens, existing):
     context = Link()
     if existing:
         context.features = existing
-    expected = existing + tokens
+    expected = existing | set(tokens)
     ffinput._parse_features(tokens, context, 'link')
     assert context.features == expected
 
