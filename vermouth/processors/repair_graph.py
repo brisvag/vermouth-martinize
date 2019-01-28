@@ -27,6 +27,29 @@ from ..utils import format_atom_string
 LOGGER = StyleAdapter(get_logger(__name__))
 
 
+def get_default(dictionary, attr, default):
+    """
+    Functions like :meth:`dict.get`, except that when `attr` is in `dictionary`
+    and `dictionary[attr]` is `None`, it will return `default`.
+
+    Parameters
+    ----------
+    dictionary: dict
+    attr: collections.abc.Hashable
+    default
+
+    Returns
+    -------
+    object
+        The value of `dictionary[attr]` if `attr` is in `dictionary` and
+        `dictionary[attr]` is not None. `default otherwise.`
+    """
+    item = dictionary.get(attr, None)
+    if item is None:
+        item = default
+    return item
+
+
 def make_reference(mol):
     """
     Takes an molecule graph (e.g. as read from a PDB file), and finds and
@@ -69,7 +92,6 @@ def make_reference(mol):
 
     for residx in residues:
         # TODO: make separate function for just one residue.
-        # TODO: multiprocess this loop?
         # TODO: Merge degree 1 nodes (hydrogens!) with the parent node. And
         # check whether the node degrees match?
 
@@ -83,11 +105,13 @@ def make_reference(mol):
         # We are going to sort the nodes of reference and residue by atomname.
         # We do this, because the ISMAGS algorithm prefers to match nodes with
         # lower IDs.
-        # Get a \uFFFF for every node that doesn't have an atomname attribute,
-        # since that sorts higher than letters, giving them the lowest priority
-        # in ISMAGS.
-        res_names = {idx: residue.nodes[idx].get('atomname', '\uFFFF') for idx in residue}
-        ref_names = {idx: reference.nodes[idx].get('atomname', '\uFFFF') for idx in reference}
+        # Get a \uFFFF for every node that doesn't have an atomname attribute
+        # or when it's None, since that sorts higher than letters, giving them
+        # the lowest priority in ISMAGS.
+
+        res_names = {idx: get_default(residue.nodes[idx], 'atomname', '\uFFFF') for idx in residue}
+        ref_names = {idx: get_default(reference.nodes[idx], 'atomname', '\uFFFF') for idx in reference}
+
         # Sort the nodes such that any atomnames that are common to both
         # reference and residue are first, and then the rest.
         # Also, sort it all by atomname. This is combined in one by sorting by
@@ -100,7 +124,11 @@ def make_reference(mol):
         # faster for str/int. So, sacrifice the memory, and relabel by making a
         # new copy.
 
-        # TODO: include a geometric alignment in the sorting.
+        # TODO: include a geometric alignment in the sorting. Humans are really
+        #       good at solving isomorphism problems iff graphs look alike. We
+        #       can do a similar trick here by rot+trans aligning the given
+        #       residue with a reference conformation. And then sort by
+        #       distance
         new_residue_names = {old: new for new, old in enumerate(sorted(residue,
                              key=lambda jdx: (res_names[jdx] not in ref_names.values(), res_names[jdx])))}
         new_reference_names = {old: new for new, old in enumerate(sorted(reference,
@@ -111,10 +139,6 @@ def make_reference(mol):
 
         # It would be nice if we were able to relabel them in-place, but it
         # seems to make everything slower. See above.
-        #nx.relabel_nodes(residue, new_residue_names, copy=False)
-        #nx.relabel_nodes(reference, new_reference_names, copy=False)
-        #res_copy = residue
-        #ref_copy = reference
         res_copy = nx.relabel_nodes(residue, new_residue_names, copy=True)
         ref_copy = nx.relabel_nodes(reference, new_reference_names, copy=True)
 
@@ -144,10 +168,6 @@ def make_reference(mol):
 
         # "unsort" the matches
         match = {old_ref_names[ref]: old_res_names[res] for ref, res in match.items()}
-
-        # Unsort graphs
-        #nx.relabel_nodes(residue, old_res_names, copy=False)
-        #nx.relabel_nodes(reference, old_ref_names, copy=False)
 
         reference_graph.add_node(residx, chain=chain, reference=reference,
                                  found=residue, resname=resname, resid=resid,
