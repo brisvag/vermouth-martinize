@@ -179,7 +179,7 @@ def iter_force_field_files(directory, extensions=FORCE_FIELD_PARSERS.keys()):
     Returns a generator over the path of all the force field files in the directory.
     """
     return itertools.chain(*(
-        glob(os.path.join(directory, '*' + extension))
+        glob(os.path.join(str(directory), '*' + extension))
         for extension in extensions
     ))
 
