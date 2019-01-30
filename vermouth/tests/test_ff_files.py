@@ -21,6 +21,7 @@ import numpy as np
 import vermouth.ffinput
 import vermouth.forcefield
 import vermouth.molecule
+from .helper_functions import make_into_set
 
 
 class TestBlock:
@@ -871,6 +872,150 @@ class TestLink:
             ],
         ]
 
+    @staticmethod
+    def test_attributes():
+        """
+        Link attributes are added to the atoms.
+        """
+        lines = """
+        [ link ]
+        attr0 "plop"
+        attr1 {"foo": "bar"}
+        attr2 10
+        attr3 "A|BB|CCC"
+        attr4 not("stuff")
+        [ atoms ]
+        XXX {"attr0": "other"}  ; overwrite attr0
+        [ bonds ]
+        YYY ZZZ
+        QQQ {"attr1": 33} WWW  ; overwrite attr1
+        """
+        lines = textwrap.dedent(lines).splitlines()
+        ff = vermouth.forcefield.ForceField(name='test_ff')
+        vermouth.ffinput.read_ff(lines, ff)
+        link = ff.links[0]
+        # Check the overwritten attributes first
+        assert link.nodes['XXX']['attr0'] == 'other'
+        assert link.nodes['QQQ']['attr1'] == 33
+        assert all(link.nodes[key]['attr0'] == 'plop'
+                   for key in ('YYY', 'ZZZ', 'QQQ', 'WWW'))
+        assert all(link.nodes[key]['attr1'] == {'foo': 'bar'}
+                   for key in ('YYY', 'ZZZ', 'XXX', 'WWW'))
+        # Check the others
+        assert all(link.nodes[key]['attr2'] == 10 for key in link.nodes)
+        assert all(
+            link.nodes[key]['attr3'] == vermouth.molecule.Choice(['A', 'BB', 'CCC'])
+            for key in link.nodes
+        )
+        assert all(
+            link.nodes[key]['attr4'] == vermouth.molecule.NotDefinedOrNot('stuff')
+            for key in link.nodes
+        )
+
+    @staticmethod
+    def test_moleta():
+        """
+        The [ molmeta ] section is read.
+        """
+        lines = """
+        [ link ]
+        [ molmeta ]
+        attr0 10
+        attr1 "plop"
+        attr2 "A|BB|CCC"
+        attr3 not("toto")
+        """
+        lines = textwrap.dedent(lines).splitlines()
+        ff = vermouth.forcefield.ForceField(name='test_ff')
+        vermouth.ffinput.read_ff(lines, ff)
+        link = ff.links[0]
+        assert link.molecule_meta == {
+            'attr0': 10,
+            'attr1': 'plop',
+            'attr2': vermouth.molecule.Choice(['A', 'BB', 'CCC']),
+            'attr3': vermouth.molecule.NotDefinedOrNot('toto'),
+        }
+
+    @staticmethod
+    def test_non_edges():
+        lines = """
+        [ link ]
+        [ non-edges ]
+        XXX YYY {"atomname": "notYYY"}
+        ABC +DEF
+        """
+        lines = textwrap.dedent(lines).splitlines()
+        ff = vermouth.forcefield.ForceField(name='test_ff')
+        vermouth.ffinput.read_ff(lines, ff)
+        link = ff.links[0]
+        print(link.non_edges)
+        assert link.non_edges == [
+            ['XXX', {'atomname': 'notYYY', 'order': 0}],
+            ['ABC',{'atomname': 'DEF', 'order': 1}],
+        ]
+
+
+
+class TestModification:
+    @staticmethod
+    def test_modification():
+        """
+        The modification section creates a modification.
+        """
+        lines = """
+        [ modification ]
+        [modification]
+        """
+        lines = textwrap.dedent(lines).splitlines()
+        ff = vermouth.forcefield.ForceField(name='test_ff')
+        vermouth.ffinput.read_ff(lines, ff)
+        # This will change after #172 is merged. Indeed, in this PR,
+        # ff.modifications becomes a dict with modification name as key, and
+        # the modification as value.
+        assert len(ff.modifications) == 2
+
+    @staticmethod
+    def test_example():
+        lines = """
+        [ modification ]
+        C-ter
+        [ atoms ]
+        CA{"element": "C"}  ; the space between the name and the attributes is optionnal
+        C {"element": "C"}
+        O {"element": "O"}
+        OXT {"element": "O", "PTM_atom": true, "replace": {"atomname": null}}
+
+        [ edges ]
+        CA C
+        C O
+        C OXT
+        """
+        lines = textwrap.dedent(lines).splitlines()
+        ff = vermouth.forcefield.ForceField(name='test_ff')
+        vermouth.ffinput.read_ff(lines, ff)
+        # This will change after #172 is merged. Indeed, in this PR,
+        # ff.modifications becomes a dict with modification name as key, and
+        # the modification as value.
+        modification = ff.modifications[0]
+
+        assert modification.name == 'C-ter'
+        assert tuple(modification.nodes(data=True)) == (
+            ('CA',{'element': 'C', 'PTM_atom': False, 'atomname': 'CA'}),
+            ('C', {'element': 'C', 'PTM_atom': False, 'atomname': 'C'}),
+            ('O', {'element': 'O', 'PTM_atom': False, 'atomname': 'O'}),
+            ('OXT', {
+                'element': 'O',
+                'PTM_atom': True,
+                'atomname': 'OXT',
+                'replace': {'atomname': None}
+            }),
+        )
+        assert set(frozenset(edge) for edge in  modification.edges) == {
+            frozenset(('CA', 'C')),
+            frozenset(('C', 'O')),
+            frozenset(('C', 'OXT')),
+        }
+
 
 def test_variables():
     """
@@ -1007,6 +1152,99 @@ def test_variable_first():
 
     [ bonds ]
     BB SC1 -- 7 8 -- 9 10
+    """,
+    # Atom attributes without reference
+    """
+    [ link ]
+    [ patterns ]
+    {"atomname": "CA"}
+    """,
+    # Prefix is inconsistent
+    """
+    [ link ]
+    [ bonds ]
+    +-+XXX YYY
+    """,
+    """
+    [ link ]
+    [ bonds ]
+    ><XXX YYY
+    """,
+    # Prefix is missing a reference
+    """
+    [ link ]
+    [ bonds ]
+    +++ YYY
+    """,
+    # Invalid order
+    """
+    [ link ]
+    [ atoms ]
+    XXX {"order": "invalid"}
+    """,
+    # Order is inconsistent with the prefix
+    """
+    [ link ]
+    [ atoms ]
+    ++XXX {"order": -3}
+    """,
+    # Mismatch between attributes in different sections
+    """
+    [ link ]
+    [ atoms ]
+    XXX {"custom": 0}
+    [ bonds ]
+    XXX {"custom": 1} YYY
+    """,
+    """
+    [ link ]
+    [ bonds ]
+    XXX {"custom": 1} YYY
+    XXX {"custom": 2} ZZZ
+    """,
+    # Wrong number of tokens in the link [ atoms ] section
+    """
+    [ link ]
+    [ atoms ]
+    XXX
+    """,
+    """
+    [ link ]
+    [ atoms ]
+    XXX {"custom": 0} "extra"
+    """,
+    # Wrong number of tokens in the [ molmeta ] section
+    """
+    [ link ]
+    [ molmeta ]
+    XXX
+    """,
+    """
+    [ link ]
+    [ molmeta ]
+    1 2 3
+    """,
+    # [ molmeta ] section outside a link
+    """
+    [ molmeta ]
+    XXX 2
+    """,
+    """
+    [ moleculetype ]
+    ABC   3
+    [ molmeta ]
+    XXX 2
+    """,
+    # [ atoms ] section not in an authorized section
+    """
+    [ atoms ]
+    XXX {"custom": 0}
+    """,
+    """
+    [ variables ]
+    XXX 10
+    [ atoms ]
+    ABD {"custom": 0}
     """,
 ))
 def test_misformed_lines(lines):

@@ -897,6 +897,8 @@ def read_ff(lines, force_field):
                     _parse_link_atom(tokens, context,
                                      defaults={'PTM_atom': False},
                                      treat_prefix=False)
+                else:
+                    raise IOError('Unecpected [ atoms ] section.')
             elif section == 'non-edges':
                 _parse_edges(tokens, context, context_type, negate=True)
             elif section == 'edges':
