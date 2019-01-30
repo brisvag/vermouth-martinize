@@ -35,6 +35,19 @@ class ForceField(object):
     """
     Description of a force field.
 
+    A force field can be created empty or read from a directory. In any case, a
+    force field must be named. If read from a directory, the base name of the
+    directory is used as force field name, unless the `name` attribute is
+    provided. If the force field is created empty, then `name` must be
+    provided.
+
+    Parameters
+    ----------
+    directory: str or pathlib.Path, optionnal
+        A directory to read the force field from.
+    name: str, optionnal
+        The name of the force field.
+
     Attributes
     ----------
     blocks: dict

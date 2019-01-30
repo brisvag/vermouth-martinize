@@ -259,7 +259,8 @@ class TestBlock:
         vermouth.ffinput.read_ff(lines, ff)
         block = ff.blocks['GLY']
 
-        assert set(block.edges) == set(edges)
+        assert (set(frozenset(edge) for edge in block.edges)
+                == set(frozenset(edge) for edge in edges))
 
     # test_interaction_fail_reference
     @staticmethod
@@ -296,11 +297,6 @@ class TestBlock:
         [ bonds ]
         BB >SC1
         """,
-        # Not enough atoms for the interaction
-        """
-        [ bonds ]
-        BB
-        """,
     ))
     def test_interaction_fail_reference(interaction_lines):
         """
@@ -318,8 +314,9 @@ class TestBlock:
         4 P4 2 TRP <SC1 1
         5 P4 2 TRP >SC1 1
         """
-        lines = textwrap.dedent(lines) + textwrap.dedent(interaction_lines)
+        lines = textwrap.dedent(lines)
         lines = lines.splitlines()
+        lines += textwrap.dedent(interaction_lines).splitlines()
 
         ff = vermouth.forcefield.ForceField(name='test_ff')
         with pytest.raises(IOError):
