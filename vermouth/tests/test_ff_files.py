@@ -784,7 +784,8 @@ class TestLink:
         link = ff.links[0]
         assert tuple(link.nodes(data=True)) == atoms
         assert link.interactions == interactions
-        assert set(link.edges) == set(edges)
+        assert (set(frozenset(edge) for edge in link.edges)
+                == set(frozenset(edge) for edge in edges))
 
     @staticmethod
     def test_negative_interactions():
