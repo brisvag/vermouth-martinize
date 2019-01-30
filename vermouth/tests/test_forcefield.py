@@ -18,6 +18,7 @@
 Tests for the ForceField class.
 """
 
+import pathlib
 import pytest
 import vermouth.forcefield
 import vermouth.molecule
@@ -123,12 +124,13 @@ def test_create_ff_from_name():
     assert ff.name == name
 
 
-def test_create_ff_from_dir(tmpdir):
+@pytest.mark.parametrize('path_type', (str, pathlib.Path))
+def test_create_ff_from_dir(tmpdir, path_type):
     """
     Creates a force field from a directory, assure that the name is correct.
     """
     ff_name = 'name'
-    directory = tmpdir.mkdir(ff_name)
+    directory = path_type(tmpdir.mkdir(ff_name))
     ff = vermouth.forcefield.ForceField(directory=directory)
     assert ff.name == ff_name
 

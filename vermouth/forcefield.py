@@ -67,7 +67,7 @@ class ForceField(object):
         self.name = None
         if directory is not None:
             self.read_from(directory)
-            self.name = os.path.basename(directory)
+            self.name = os.path.basename(str(directory))
         if name is not None:
             self.name = name
         if self.name is None:
