@@ -130,7 +130,8 @@ def test_create_ff_from_dir(tmpdir, path_type):
     Creates a force field from a directory, assure that the name is correct.
     """
     ff_name = 'name'
-    directory = path_type(tmpdir.mkdir(ff_name))
+    # Depending on the version of python, the type of tmpdir may differ.
+    directory = path_type(str(tmpdir.mkdir(ff_name)))
     ff = vermouth.forcefield.ForceField(directory=directory)
     assert ff.name == ff_name
 
