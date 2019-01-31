@@ -43,9 +43,9 @@ class ForceField(object):
 
     Parameters
     ----------
-    directory: str or pathlib.Path, optionnal
+    directory: str or pathlib.Path, optional
         A directory to read the force field from.
-    name: str, optionnal
+    name: str, optional
         The name of the force field.
 
     Attributes

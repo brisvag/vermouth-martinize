@@ -364,7 +364,7 @@ def test_parse_atom_attributes_error(token):
         ['--'],
         None,
         [],
-    )
+    ),
 ))
 def test_get_atoms(tokens, natoms, expected):
     """
@@ -377,6 +377,15 @@ def test_get_atoms(tokens, natoms, expected):
     # Make sure '--' is consumed if needed
     if tokens:
         assert not tokens[0] == '--'
+
+
+def test_separator():
+    """
+    _get_atoms only remove the appropriate separator.
+    """
+    tokens = collections.deque(['XX', 'YY', '--', 'AA', '--', 'BB'])
+    ffinput._get_atoms(tokens, None)
+    assert list(tokens) == ['AA', '--', 'BB']
 
 
 @pytest.mark.parametrize('tokens, natoms', (

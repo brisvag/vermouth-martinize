@@ -804,7 +804,7 @@ def _parse_variables(tokens, force_field, section):
     try:
         value = json.loads(value)
     except JSONDecodeError:
-        value = json.loads('"{}"'.format(value))
+        value = str(value)
     force_field.variables[key] = value
 
 

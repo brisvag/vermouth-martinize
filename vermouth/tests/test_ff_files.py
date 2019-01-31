@@ -1050,6 +1050,7 @@ def test_variables_existing():
     lines = textwrap.dedent(lines).splitlines()
     ff = vermouth.forcefield.ForceField(name='test_ff')
     ff.variables['existing'] = 0
+    ff.variables['updated'] = 5
     vermouth.ffinput.read_ff(lines, ff)
     assert ff.variables == {'existing': 0, 'added': 1, 'updated': 2}
 
